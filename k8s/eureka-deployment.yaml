@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -f docker-compose.yml -o k8s/
+    kompose.version: 1.38.0 (a8f5d1cbd)
+  labels:
+    io.kompose.service: eureka
+  name: eureka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: eureka
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert -f docker-compose.yml -o k8s/
+        kompose.version: 1.38.0 (a8f5d1cbd)
+      labels:
+        io.kompose.service: eureka
+    spec:
+      containers:
+        - image: moboks/aeroport-eureka:v1
+          livenessProbe:
+            exec:
+              command:
+                - wget
+                - -q
+                - --spider
+                - http://localhost:8761/actuator/health
+            failureThreshold: 5
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          name: eureka
+          ports:
+            - containerPort: 8761
+              protocol: TCP
+      restartPolicy: Always
