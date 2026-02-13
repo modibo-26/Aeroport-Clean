@@ -1,11 +1,11 @@
 # ✈️ Aéroport - Backend Microservices
 
-Système de gestion aéroportuaire basé sur une architecture microservices Spring Boot.
+Système de gestion aéroportuaire basé sur une architecture microservices Spring Boot, avec migration vers la **Clean Architecture** (Hexagonal) pour les services métier.
 
-## Architecture
+## Architecture globale
 
 ```
-                         Client (React / Vue)
+                         Client (React)
                                │
                                ▼
                       ┌────────────────┐
@@ -31,13 +31,71 @@ Système de gestion aéroportuaire basé sur une architecture microservices Spri
 
 ## Stack technique
 
-- **Java 21** + **Spring Boot 3.5**
-- **Spring Cloud** (Eureka, Gateway, OpenFeign)
-- **Spring Security** + **JWT** (dans service-auth et Gateway)
+- **Java 17** (compilé avec Maven 3.9, runtime Eclipse Temurin 21)
+- **Spring Boot 4.0.2** + **Spring Cloud 2025.1.0**
+- **Spring Security** + **JWT** (JJWT 0.11.5)
 - **PostgreSQL 15** (une base par microservice)
-- **Apache Kafka** (communication asynchrone)
+- **Apache Kafka** (Confluent 7.5.0, mode KRaft sans Zookeeper)
 - **Docker Compose** (infrastructure + services)
 - **Lombok** + **Maven**
+
+---
+
+## Structure du projet
+
+```
+Aeroport-Clean/
+├── eureka/                   # Service Discovery (port 8761)
+├── gateway/                  # API Gateway (port 8080)
+├── service-auth/             # Authentification + JWT (port 8081) - Architecture classique
+├── service-vols/             # Gestion des vols (port 8082) - Clean Architecture
+├── service-reservations/     # Gestion des réservations (port 8083) - Clean Architecture
+├── service-notifications/    # Notifications Kafka (port 8084) - Clean Architecture
+├── k8s/                      # Manifestes Kubernetes (30 fichiers)
+├── docker-compose.yml        # Dev (build local)
+├── docker-compose.prod.yml   # Prod (images Docker Hub)
+└── Jenkinsfile               # CI/CD : GitHub → Docker Hub → AWS EC2
+```
+
+---
+
+## Clean Architecture
+
+Les services **vols**, **réservations** et **notifications** suivent la Clean Architecture (ports & adapters) :
+
+```
+src/main/java/com/aeroport/{service}/
+├── domain/
+│   ├── model/             # Entités métier pures (POJO + Lombok, aucune annotation framework)
+│   ├── port/in/           # Ports entrants (interfaces use cases)
+│   ├── port/out/          # Ports sortants (interfaces repository, event publisher)
+│   └── exception/         # Exceptions métier typées
+├── application/           # Implémentation des use cases (wirés via @Bean, pas de @Service)
+├── infrastructure/
+│   ├── persistence/       # @Entity JPA, Spring Data repos, mappers domain↔JPA, adapters
+│   ├── kafka/             # Kafka event DTOs + adapters (impl des ports out)
+│   ├── feign/             # @FeignClient + adapters (réservations, notifications)
+│   └── config/            # @Configuration + @Bean (composition root : BeanConfig.java)
+├── presentation/          # @RestController, DTOs request/response, mappers, exception handlers
+└── *Application.java
+```
+
+**Règle de dépendance** : `presentation / infrastructure → application → domain`
+Le domain ne dépend d'aucun framework.
+
+### Service Auth (architecture classique)
+
+```
+src/main/java/com/aeroport/auth/
+├── controller/        # @RestController
+├── service/           # Logique métier
+├── entity/            # @Entity JPA + enums
+├── repository/        # Spring Data JPA
+├── dto/               # DTOs request/response
+├── config/            # @Configuration Spring
+├── security/          # JWT (génération + validation)
+└── ServiceAuthApplication.java
+```
 
 ---
 
@@ -48,8 +106,6 @@ Système de gestion aéroportuaire basé sur une architecture microservices Spri
 - Docker + Docker Compose
 
 ### Option 1 : Images Docker Hub (recommandé)
-
-Aucun build nécessaire, les images sont téléchargées automatiquement :
 
 ```bash
 docker-compose -f docker-compose.prod.yml up -d
@@ -65,13 +121,10 @@ docker-compose up -d --build
 
 - Eureka Dashboard : http://localhost:8761
 - API Gateway : http://localhost:8080
-- Tous les services doivent être enregistrés (5 services).
 
 ---
 
 ## Docker Hub
-
-Les images sont disponibles publiquement :
 
 | Service | Image |
 |---------|-------|
@@ -92,7 +145,7 @@ Service Discovery — annuaire central où tous les microservices s'enregistrent
 
 ### API Gateway (port 8080)
 
-Point d'entrée unique. Responsabilités :
+Point d'entrée unique :
 - Routage des requêtes vers les services
 - Validation JWT (filtre personnalisé)
 - Extraction des infos utilisateur (headers `X-User-Id`, `X-User-Role`)
@@ -122,15 +175,13 @@ Authentification et inscription.
 | POST | `/auth/register` | Inscription |
 | POST | `/auth/login` | Connexion (retourne JWT) |
 
-**Sécurité :** Spring Security + BCrypt pour le hashage des mots de passe. JWT généré avec `io.jsonwebtoken` (jjwt), contient `sub` (userId), `email`, `role`, expiration 24h.
-
-### Service Vols (port 8082)
+### Service Vols (port 8082) — Clean Architecture
 
 Gestion des vols.
 
-**Entités :** `Vol` (id, numeroVol, origine, destination, dateDepart, dateArrivee, placesDisponibles, prixBase, compagnie, statut)
+**Modèle domaine :** `Vol` (id, numeroVol, origine, destination, dateDepart, dateArrivee, placesDisponibles, prixBase, compagnie, statut)
 
-**Enum StatutVol :** `A_L_HEURE`, `RETARDE`, `ANNULE`
+**Enum Statut :** `A_L_HEURE`, `RETARDE`, `ANNULE`
 
 **Endpoints :**
 
@@ -145,13 +196,15 @@ Gestion des vols.
 | PUT | `/vols/{id}/statut` | Admin | Changer le statut |
 | DELETE | `/vols/{id}` | Admin | Supprimer un vol |
 
-**Kafka Producer :** Publie sur le topic `vol-events` lors de la modification ou du changement de statut d'un vol.
+**Ports sortants :** `VolRepositoryPort`, `VolEventPublisherPort`
 
-### Service Réservations (port 8083)
+**Kafka Producer :** Publie sur le topic `vol-events` lors de la modification ou du changement de statut.
+
+### Service Réservations (port 8083) — Clean Architecture
 
 Gestion des réservations avec vérification des places disponibles via Feign.
 
-**Entités :** `Reservation` (id, passagerId, volId, dateReservation, statut, nombrePlaces)
+**Modèle domaine :** `Reservation` (id, passagerId, volId, dateReservation, statut, nombrePlaces)
 
 **Enum Statut :** `EN_ATTENTE`, `CONFIRMEE`, `ANNULEE`
 
@@ -166,17 +219,18 @@ Gestion des réservations avec vérification des places disponibles via Feign.
 | GET | `/reservations/passager/{id}` | Authentifié | Mes réservations |
 | GET | `/reservations/vol/{volId}` | Admin | Réservations d'un vol |
 
+**Ports sortants :** `ReservationRepositoryPort`, `ReservationEventPublisherPort`, `VolServicePort` (Feign)
+
 **Communication :**
-- **Feign Client** vers SERVICE-VOLS pour vérifier les places disponibles avant réservation
-- **Feign Client** vers SERVICE-VOLS pour incrémenter/décrémenter places lors de la confirmation/annulation
-- **Kafka Producer** : Publie sur `reservation-events` lors de la création, confirmation et annulation
-- **Kafka Consumer** : Écoute `vol-events` pour annuler automatiquement les réservations si un vol est annulé
+- **Feign Client** vers SERVICE-VOLS : vérification places, incrément/décrément places
+- **Kafka Producer** : publie sur `reservation-events`
+- **Kafka Consumer** : écoute `vol-events` pour annulation en cascade si un vol est annulé
 
-### Service Notifications (port 8084)
+### Service Notifications (port 8084) — Clean Architecture
 
-Notifications aux passagers, alimenté par Kafka.
+Notifications aux passagers, alimentées par Kafka.
 
-**Entités :** `Notification` (id, passagerId, volId, message, dateCreation, lue)
+**Modèle domaine :** `Notification` (id, passagerId, volId, message, dateCreation, lue)
 
 **Endpoints :**
 
@@ -187,6 +241,8 @@ Notifications aux passagers, alimenté par Kafka.
 | GET | `/notifications/vol/{volId}` | Admin | Notifications d'un vol |
 | PUT | `/notifications/{id}/lue` | Authentifié | Marquer comme lue |
 | DELETE | `/notifications/{id}` | Authentifié | Supprimer |
+
+**Ports sortants :** `NotificationRepositoryPort`
 
 **Kafka Consumer :** Écoute les topics `vol-events` et `reservation-events` pour créer automatiquement des notifications.
 
@@ -202,6 +258,8 @@ Service Réservations ──► Service Vols
    - Incrémenter/décrémenter places
 ```
 
+En Clean Architecture, le Feign client est caché derrière un port out (`VolServicePort`).
+
 ### Asynchrone (Kafka)
 
 ```
@@ -213,16 +271,16 @@ Service Réservations ──► reservation-events ──┘
 ```
 
 **Topics Kafka :**
-- `vol-events` : événements liés aux vols (modification, retard, annulation)
-- `reservation-events` : événements liés aux réservations (création, confirmation, annulation)
+- `vol-events` : modifications de vols, changements de statut
+- `reservation-events` : création, confirmation, annulation de réservations
+
+En Clean Architecture, Kafka est caché derrière des ports out (`VolEventPublisherPort`, `ReservationEventPublisherPort`).
 
 ---
 
 ## Sécurité
 
 ### Approche Gateway-centric
-
-Le Gateway valide le JWT et transmet les infos utilisateur aux services via headers :
 
 ```
 Client → [JWT dans Authorization header] → Gateway
@@ -240,8 +298,40 @@ Les services métier ne valident pas le JWT — ils font confiance au Gateway.
 
 ### Routes protégées
 
-- Authentifié : réservations passager, notifications passager.
-- Admin : CRUD vols (POST/PUT/DELETE), notifications par vol, réservations par vol.
+- **Authentifié** : réservations passager, notifications passager
+- **Admin** : CRUD vols (POST/PUT/DELETE), notifications par vol, réservations par vol
+
+---
+
+## Bases de données
+
+| Service | Conteneur | Port | Base |
+|---------|-----------|------|------|
+| service-auth | postgres-auth | 5431 | auth_db |
+| service-vols | postgres-vols | 5432 | vols_db |
+| service-reservations | postgres-reservations | 5433 | reservations_db |
+| service-notifications | postgres-notifications | 5434 | notifications_db |
+
+DDL : `spring.jpa.hibernate.ddl-auto=update` (auto-création du schéma).
+
+---
+
+## Déploiement
+
+### CI/CD (Jenkins)
+
+Pipeline déclenchée par push GitHub (branche main) :
+1. Clone depuis `github.com/modibo-26/Aeroport.git`
+2. Build Docker Compose + tag + push vers Docker Hub
+3. SSH vers AWS EC2, pull + redeploy
+
+### Kubernetes
+
+```bash
+kubectl apply -f k8s/
+```
+
+30 manifestes : deployments, services, PVCs pour tous les services + bases de données + Kafka.
 
 ---
 
