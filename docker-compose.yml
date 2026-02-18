@@ -80,6 +80,7 @@ services:
   # ============================================
 
   eureka:
+    init: true
     build:
       context: ./eureka
     ports:
@@ -94,6 +95,7 @@ services:
       start_period: 60s
 
   gateway:
+    init: true
     build:
       context: ./gateway
     ports:
@@ -107,6 +109,7 @@ services:
       - aeroport-network
 
   service-auth:
+    init: true
     build:
       context: ./service-auth
     ports:
@@ -125,6 +128,7 @@ services:
       - aeroport-network
 
   service-vols:
+    init: true
     build:
       context: ./service-vols
     ports:
@@ -146,6 +150,7 @@ services:
       - aeroport-network
 
   service-reservations:
+    init: true
     build:
       context: ./service-reservations
     ports:
@@ -167,6 +172,7 @@ services:
       - aeroport-network
 
   service-notifications:
+    init: true
     build:
       context: ./service-notifications
     ports:
@@ -202,3 +208,4 @@ volumes:
 networks:
   aeroport-network:
     driver: bridge
+    name: aeroport-network

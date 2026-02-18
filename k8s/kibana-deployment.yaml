@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -f /Users/retina/Documents/Village/Aeroport-Clean/docker-compose.elk.yml -o /Users/retina/Documents/Village/Aeroport-Clean/k8s/
+    kompose.version: 1.38.0 (a8f5d1cbd)
+  labels:
+    io.kompose.service: kibana
+  name: kibana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: kibana
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert -f /Users/retina/Documents/Village/Aeroport-Clean/docker-compose.elk.yml -o /Users/retina/Documents/Village/Aeroport-Clean/k8s/
+        kompose.version: 1.38.0 (a8f5d1cbd)
+      labels:
+        io.kompose.service: kibana
+    spec:
+      containers:
+        - image: docker.elastic.co/kibana/kibana:7.17.18
+          name: kibana
+          ports:
+            - containerPort: 5601
+              protocol: TCP
+          resources:
+            requests:
+              memory: "768Mi"
+            limits:
+              memory: "1Gi"
+          volumeMounts:
+            - mountPath: /usr/share/kibana/config/kibana.yml
+              name: kibana-config
+              subPath: kibana.yml
+      restartPolicy: Always
+      volumes:
+        - configMap:
+            name: kibana-config
+          name: kibana-config

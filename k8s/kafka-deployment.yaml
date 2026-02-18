@@ -37,11 +37,18 @@ spec:
               value: "1"
             - name: KAFKA_PROCESS_ROLES
               value: broker,controller
+            - name: KAFKA_HEAP_OPTS
+              value: -Xms256m -Xmx256m
           image: confluentinc/cp-kafka:7.5.0
           name: kafka
           ports:
             - containerPort: 9092
               protocol: TCP
+          resources:
+            requests:
+              memory: "512Mi"
+            limits:
+              memory: "768Mi"
           volumeMounts:
             - mountPath: /var/lib/kafka/data
               name: kafka-data

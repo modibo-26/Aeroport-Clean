@@ -39,7 +39,7 @@ Système de gestion aéroportuaire basé sur une architecture microservices Spri
 - **Docker Compose** (infrastructure + services)
 - **Lombok** + **Maven**
 
----
+--- 
 
 ## Structure du projet
 
@@ -53,7 +53,6 @@ Aeroport-Clean/
 ├── service-notifications/    # Notifications Kafka (port 8084) - Clean Architecture
 ├── k8s/                      # Manifestes Kubernetes (30 fichiers)
 ├── docker-compose.yml        # Dev (build local)
-├── docker-compose.prod.yml   # Prod (images Docker Hub)
 └── Jenkinsfile               # CI/CD : GitHub → Docker Hub → AWS EC2
 ```
 
@@ -105,13 +104,7 @@ src/main/java/com/aeroport/auth/
 
 - Docker + Docker Compose
 
-### Option 1 : Images Docker Hub (recommandé)
-
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-### Option 2 : Build local (développement)
+### Lancement
 
 ```bash
 docker-compose up -d --build

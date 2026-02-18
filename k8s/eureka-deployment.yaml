@@ -21,7 +21,16 @@ spec:
         io.kompose.service: eureka
     spec:
       containers:
-        - image: moboks/aeroport-eureka:v1
+        - env:
+            - name: JAVA_OPTS
+              value: -Xmx256m
+          image: moboks/aeroport-eureka:v1
+          imagePullPolicy: Never
+          resources:
+            requests:
+              memory: "384Mi"
+            limits:
+              memory: "512Mi"
           livenessProbe:
             exec:
               command:

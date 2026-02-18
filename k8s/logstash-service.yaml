@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -f /Users/retina/Documents/Village/Aeroport-Clean/docker-compose.elk.yml -o /Users/retina/Documents/Village/Aeroport-Clean/k8s/
+    kompose.version: 1.38.0 (a8f5d1cbd)
+  labels:
+    io.kompose.service: logstash
+  name: logstash
+spec:
+  ports:
+    - name: "5000"
+      port: 5000
+      targetPort: 5000
+  selector:
+    io.kompose.service: logstash

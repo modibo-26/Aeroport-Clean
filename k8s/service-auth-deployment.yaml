@@ -32,9 +32,17 @@ spec:
               value: jdbc:postgresql://postgres-auth:5432/auth_db
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
+            - name: JAVA_OPTS
+              value: -Xmx256m
           image: moboks/aeroport-service-auth:v1
+          imagePullPolicy: Never
           name: service-auth
           ports:
             - containerPort: 8081
               protocol: TCP
+          resources:
+            requests:
+              memory: "384Mi"
+            limits:
+              memory: "512Mi"
       restartPolicy: Always
